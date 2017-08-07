@@ -1,12 +1,10 @@
-from scipy.misc import imread
+# from scipy.misc import imread
 from PIL import Image
 
 import tensorflow as tf
 import os
 import numpy as np
-
-import src.Emotion.CONSTANT as CONSTANT
-
+import CONSTANT
 
 def weight_variable(shape):
     initial = tf.Variable(tf.truncated_normal(shape, mean=0, stddev=1.0, dtype=tf.float32))
