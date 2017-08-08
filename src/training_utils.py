@@ -1,10 +1,10 @@
-# from scipy.misc import imread
 from PIL import Image
 
 import tensorflow as tf
 import os
 import numpy as np
 import CONSTANT
+
 
 def weight_variable(shape):
     initial = tf.Variable(tf.truncated_normal(shape, mean=0, stddev=1.0, dtype=tf.float32))
@@ -42,10 +42,10 @@ def load_data():
         half_the_height = image.size[1] / 2
         img_temp = image.crop(
             (
-                half_the_width - width/2,
-                half_the_height - height/2,
-                half_the_width + width/2,
-                half_the_height + height/2
+                half_the_width - width / 2,
+                half_the_height - height / 2,
+                half_the_width + width / 2,
+                half_the_height + height / 2
             )
         )
         # img_temp.save("img4.jpg")
@@ -71,9 +71,18 @@ def load_data():
 
 
 def load_labels():
-    db_path = CONSTANT.GENKI4K_labels_path
+    labels_path = CONSTANT.GENKI4K_labels_path
+    labels = []
 
-    f = open(db_path + "labels.txt")
+    with open(labels_path, "r") as f:
+        while True:
+            tmp = f.readline()
+
+            if tmp == "":
+                break
+
+            labels.append(tmp.split(' ')[0])
+
 
 
 def preprocessing(numpy_data):
