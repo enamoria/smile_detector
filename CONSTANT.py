@@ -13,3 +13,5 @@ GENKI4K_labels_path = ROOT_DIR + "/data/genki4k/labels.txt"
 FLATTEN_SHAPE = 192 * 178 * 3
 IMAGE_SHAPE = [192, 178, 3]
 NUM_CLASS = 2
+
+FC_NEURON = 160
