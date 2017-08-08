@@ -1,7 +1,8 @@
-from PIL import Image
+from PIL.Image import Image
 
 import tensorflow as tf
 import os
+import cv2
 import numpy as np
 import CONSTANT
 
@@ -37,37 +38,23 @@ def local_norm(output):
 
 
 def load_data():
-    def crop_image(image, height, width):  # crop image
-        half_the_width = image.size[0] / 2
-        half_the_height = image.size[1] / 2
-        img_temp = image.crop(
-            (
-                half_the_width - width / 2,
-                half_the_height - height / 2,
-                half_the_width + width / 2,
-                half_the_height + height / 2
-            )
-        )
-        # img_temp.save("img4.jpg")
-        return img_temp  # crop image
-
-    shape_0, shape_1, shape_2 = CONSTANT.IMAGE_SHAPE
-
+    # shape_0, shape_1, shape_2 = CONSTANT.IMAGE_SHAPE
     db_path = CONSTANT.GENKI4K_db_path
     images_list = os.listdir(db_path)
 
-    images = np.empty([shape_0, shape_1, shape_2])
-    print("xxx", images.shape)
+    images = []
     for index, image_name in enumerate(images_list):
-        img = Image.open(db_path + image_name)
-        # imread(db_path + image_name)
-        tmp = crop_image(img, shape_0, shape_1)
+        img = cv2.imread(db_path + image_name)
         try:
-            np.concatenate((images, np.asarray(tmp)), axis=0)
-        except Exception:
-            pass
+            tmp = cv2.resize(img, (96, 96))
+        # print(img.shape)
 
-    return images
+            images.append(np.asarray(tmp))
+            # np.concatenate((images, np.asarray(tmp)), axis=0)
+        except Exception as e:
+            print("Exception found:", e)
+
+    return np.asarray(images)
 
 
 def load_labels():
@@ -83,6 +70,7 @@ def load_labels():
 
             labels.append(tmp.split(' ')[0])
 
+    return np.asarray(labels)
 
 
 def preprocessing(numpy_data):
@@ -90,10 +78,18 @@ def preprocessing(numpy_data):
     flatten = np.reshape(numpy_data, (numpy_data.shape[0], -1))
     # print(flatten.shape, numpy_data.shape)
 
-    mean = np.mean(flatten, axis=0)
-    stddev = np.std(flatten, axis=0)
+    mean = np.mean(flatten, axis=1)
+    stddev = np.std(flatten, axis=1)
 
-    flatten -= mean
-    flatten /= stddev
+    print(type(numpy_data))
+    print(type(flatten))
+    print(type(mean))
+    print(type(stddev))
+
+    try:
+        flatten -= mean
+        flatten /= stddev
+    except Exception as e:
+        print("Exception found: ", e)
 
     return flatten

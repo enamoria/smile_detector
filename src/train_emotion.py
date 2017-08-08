@@ -5,6 +5,7 @@ import CONSTANT
 from src import training_utils as utils
 
 # Model param:
+# todo
 tf.app.flags.DEFINE_integer('batch_size', 256, "Batch_size")
 tf.app.flags.DEFINE_string('db_path', CONSTANT.GENKI4K_db_path, "path to genki db")
 tf.app.flags.DEFINE_string('labels_path', CONSTANT.GENKI4K_labels_path, "path to genki labels")

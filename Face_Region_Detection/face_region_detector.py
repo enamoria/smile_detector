@@ -1,6 +1,13 @@
+"""
+This script is a face detector using provided pre-trained Haar_cascade
+Results aren't good enough to be used in the future
+"""
+
 import numpy as np
+import os, sys
 import cv2
-import src.Emotion.CONSTANT as CONSTANT
+import CONSTANT
+sys.path.append(CONSTANT.ROOT_DIR)
 
 # Load the xml pre-train cascade classifier
 def face_region_detector(pic_name):
