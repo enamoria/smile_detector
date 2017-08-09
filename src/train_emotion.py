@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import numpy as np
 import tensorflow as tf
 
@@ -15,23 +17,24 @@ IMAGE_SIZE = CONSTANT.IMAGE_SHAPE
 NUM_CLASS = CONSTANT.NUM_CLASS
 
 # Training param
-BATCH_SIZE = 256
-LEARNING_RATE = 0.1
+LEARNING_RATE = 0.001
 LEARNING_RATE_DECAY = 0.1
-NUM_EPOCH = 10
 
-TRAINING_SET = 3000
-TESTING_SET = 1000
+BATCH_SIZE = 256
+NUM_EPOCH = 50
+
+TRAIN_SIZE = 3000
+TEST_SIZE = 1000
 
 
 # Have no idea what this thing do todo
 def _activation_summary(x):
     tensor_name = x.op.name
-    tf.summary.histogram(tensor_name)
+    tf.summary.histogram(tensor_name, x)
     tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
 
-def nn_emotion(images, labels):
+def nn_emotion(images):
     # data = utils.load_data()
     # utils.preprocessing(data)
 
@@ -42,7 +45,7 @@ def nn_emotion(images, labels):
     # W_conv1 = utils.weight_variable([])
 
     with tf.variable_scope('conv1') as scope:
-        kernel = utils.weight_variable(shape=[11, 11, 1, 32])
+        kernel = utils.weight_variable(shape=[11, 11, 3, 32])
         conv = tf.nn.conv2d(images, kernel, [1, 4, 4, 1], padding='SAME')
 
         bias = utils.bias_variable(shape=[32])
@@ -63,7 +66,7 @@ def nn_emotion(images, labels):
         kernel = utils.weight_variable(shape=[5, 5, 32, 96])
         conv = tf.nn.conv2d(norm1, kernel, strides=[1, 1, 1, 1], padding='SAME')
 
-        bias = utils.bias_variable(shape=[32])
+        bias = utils.bias_variable(shape=[96])
 
         conv2 = tf.nn.relu(tf.nn.bias_add(conv, bias), name=scope.name)
         _activation_summary(conv2)
@@ -95,7 +98,7 @@ def nn_emotion(images, labels):
         _activation_summary(conv4)
 
     # FC1
-    conv4_tensor_shape = conv4.shape().as_list()
+    conv4_tensor_shape = conv4.get_shape().as_list()
     reshape = tf.reshape(conv4,
                          [conv4_tensor_shape[0], conv4_tensor_shape[1] * conv4_tensor_shape[2] * conv4_tensor_shape[3]])
 
@@ -108,6 +111,8 @@ def nn_emotion(images, labels):
     fc2_weights = utils.weight_variable([160, 2])
     fc2_bias = utils.bias_variable([2])
 
+    # print("fc1 shape:", fc1.shape)
+    # print("fc2_ weights shape:", fc2_weights.shape)
     fc2 = tf.matmul(fc1, fc2_weights) + fc2_bias
 
     return fc2
@@ -117,38 +122,69 @@ def main():
     labels = utils.load_labels()
     data = utils.load_data()
 
-    data = utils.preprocessing(data)
+    # data = utils.preprocessing(data)
+    # TODO need to implement 4-fold cross-validation later on
+    X_test_set = data[TRAIN_SIZE:]
+    y_test_set = labels[TRAIN_SIZE:]
 
-    y_nn = nn_emotion(data, labels)
+    X_train_set = data[:TRAIN_SIZE]
+    y_train_set = labels[:TRAIN_SIZE]
+    #######################
+
+    y_nn = nn_emotion(X_train_set)
 
     x = tf.placeholder(tf.float32, [None, 96, 96, 3])
     y = tf.placeholder(tf.int8, [None, 2])
 
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=y_nn))
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_train_set, logits=y_nn))
 
-    train_step = tf.train.AdamOptimizer(0.0001).minimize(cross_entropy)
+    # TODO regularization
 
-    correct_prediction = tf.equal(tf.argmax(y_nn, 1), tf.argmax(labels, 1))
+    train_step = tf.train.AdamOptimizer(0.001).minimize(cross_entropy)
+    # tf.train.MomentumOptimizer()
+
+    correct_prediction = tf.equal(tf.argmax(y_nn, 1), tf.argmax(y_train_set, 1))
 
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
+        # tf.global_variables_initializer().run()
 
-        np.random.shuffle(data)
+        ### for each epoch, do:
+        ###   for each batch, do:
+        ###     create pre-processed batch
+        ###     run optimizer by feeding batch
+        ###     find cost and reiterate to minimize
 
-        for step in range(200):
-            X_train = data[:3000]
-            y_train = labels[:3000]
+        for epoch in range(NUM_EPOCH):
+            # #batch
+            total_batch = int(TRAIN_SIZE / BATCH_SIZE)
 
-            X_test = data[3000:]
-            y_test = labels[3000:]
+            for step in range(total_batch):
+                batch_x, batch_y = utils.batch_generator(X_train_set, y_train_set, BATCH_SIZE)
 
-            if step % 100 == 0:
-                train_accuracy = accuracy.eval(feed_dict={x: X_train, y: y_train})
-                print('step %d: training accuracy %g' % (step, train_accuracy))
+                sess.run(train_step, feed_dict={x: batch_x, y: batch_y})
 
-            print('test_accuracy %g' % accuracy.eval(feed_dict={x: X_test, y: y_test}))
+            training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y: y_train_set})
+            print("Epoch: ", epoch, "training accuracy = ", training_accuracy)
+
+            # for step in range(2000):
+            #     np.random.shuffle(data)
+            #
+            #     X_train = data[:3000]
+            #     y_train = labels[:3000]
+            #
+            #     X_test = data[3000:]
+            #     y_test = labels[3000:]
+            #
+            #     train_step.run(feed_dict={x: X_train, y: y_train})
+            #     if step % 100 == 0:
+            #         train_accuracy = accuracy.eval(feed_dict={x: X_test, y: y_test})
+            #         print('step %d: training accuracy %g' % (step, train_accuracy))
+            #
+            #     # print('test_accuracy %g' % accuracy.eval(feed_dict={x: X_test, y: y_test}))
+
 
 main()
 
