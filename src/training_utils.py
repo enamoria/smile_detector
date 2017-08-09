@@ -1,9 +1,9 @@
-from PIL.Image import Image
-
-import tensorflow as tf
 import os
+
 import cv2
 import numpy as np
+import tensorflow as tf
+
 import CONSTANT
 
 
@@ -47,14 +47,14 @@ def load_data():
         img = cv2.imread(db_path + image_name)
         try:
             tmp = cv2.resize(img, (96, 96))
-        # print(img.shape)
+            # print(img.shape)
 
             images.append(np.asarray(tmp))
             # np.concatenate((images, np.asarray(tmp)), axis=0)
         except Exception as e:
             print("Exception found:", e)
 
-    return np.asarray(images)
+    return np.asarray(images, dtype=np.float32)
 
 
 def load_labels():
@@ -63,12 +63,14 @@ def load_labels():
 
     with open(labels_path, "r") as f:
         while True:
+            seed = np.array([0, 0])
             tmp = f.readline()
 
             if tmp == "":
                 break
 
-            labels.append(tmp.split(' ')[0])
+            seed[int(tmp.split(' ')[0])] = 1
+            labels.append(seed)
 
     return np.asarray(labels)
 
@@ -81,15 +83,43 @@ def preprocessing(numpy_data):
     mean = np.mean(flatten, axis=1)
     stddev = np.std(flatten, axis=1)
 
-    print(type(numpy_data))
-    print(type(flatten))
-    print(type(mean))
-    print(type(stddev))
+    # print(type(numpy_data))
+    # print(type(flatten))
+    # print(type(mean))
+    # print(type(stddev))
+
+    print(flatten.shape)
+    print(mean.shape)
+    print(stddev.shape)
 
     try:
-        flatten -= mean
-        flatten /= stddev
+        flatten = flatten[:, :, np.newaxis] - mean
+        flatten = flatten / stddev
     except Exception as e:
         print("Exception found: ", e)
 
     return flatten
+
+
+def fold_generator(data, batch_size):
+    # TODO need to be edited
+    batch_num = int(len(data) / batch_size)
+    batches = [data[i * batch_size: (i + 1) * batch_size] for i in range(batch_num)]
+
+    if len(data) > batch_num * batch_size:
+        batches.append(data[batch_num * batch_size:])
+
+    return batches
+
+
+def batch_generator(data, labels, batch_size):
+    # pass
+    # np.random.shuffle(np.array(np.arange(len(data))))
+    indices = np.array(np.arange(len(data)))
+    np.random.shuffle(indices)
+
+    indices = indices[:batch_size]
+    batch_x = data[indices]
+    batch_y = labels[indices]
+
+    return batch_x, batch_y
