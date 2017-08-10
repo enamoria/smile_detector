@@ -19,6 +19,7 @@ NUM_CLASS = CONSTANT.NUM_CLASS
 # Training param
 LEARNING_RATE = 0.001
 LEARNING_RATE_DECAY = 0.1
+REG_LAMBDA = 0.5
 
 BATCH_SIZE = 256
 NUM_EPOCH = 50
@@ -115,7 +116,10 @@ def nn_emotion(images):
     # print("fc2_ weights shape:", fc2_weights.shape)
     fc2 = tf.matmul(fc1, fc2_weights) + fc2_bias
 
-    return fc2
+    regularization = tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_bias) + tf.nn.l2_loss(fc2_weights) + tf.nn.l2_loss(
+        fc2_bias)
+
+    return fc2, regularization
 
 
 def main():
@@ -131,12 +135,13 @@ def main():
     y_train_set = labels[:TRAIN_SIZE]
     #######################
 
-    y_nn = nn_emotion(X_train_set)
+    y_nn, regularization = nn_emotion(X_train_set)
 
     x = tf.placeholder(tf.float32, [None, 96, 96, 3])
     y = tf.placeholder(tf.int8, [None, 2])
 
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_train_set, logits=y_nn))
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_train_set, logits=y_nn)) \
+                    + REG_LAMBDA / float(2 * TRAIN_SIZE) * (tf.nn.l2_loss(y_nn)) + regularization
 
     # TODO regularization
 
@@ -167,7 +172,7 @@ def main():
                 sess.run(train_step, feed_dict={x: batch_x, y: batch_y})
 
             training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y: y_train_set})
-            print("Epoch: ", epoch, "training accuracy = ", training_accuracy)
+            print("Epoch:", epoch, "training accuracy = ", training_accuracy)
 
             # for step in range(2000):
             #     np.random.shuffle(data)
@@ -185,6 +190,9 @@ def main():
             #
             #     # print('test_accuracy %g' % accuracy.eval(feed_dict={x: X_test, y: y_test}))
 
+        test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y: y_test_set})
+
+        print(test_accuracy)
 
 main()
 
