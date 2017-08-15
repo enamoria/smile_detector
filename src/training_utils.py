@@ -1,10 +1,12 @@
 import os
+import sys
 
 import cv2
 import numpy as np
 import tensorflow as tf
 
 import CONSTANT
+import matplotlib.pyplot as plt
 
 
 def weight_variable(shape):
@@ -35,13 +37,15 @@ def local_norm(output):
     return
     # tf.nn.local_response_normalization()
     # BETTER USE BATCH_NORM
-    # TODO
+    # TODO Done
 
 
 def load_data():
     # shape_0, shape_1, shape_2 = CONSTANT.IMAGE_SHAPE
     db_path = CONSTANT.GENKI4K_db_path
     images_list = os.listdir(db_path)
+
+    labels = load_labels()
 
     images = []
     for index, image_name in enumerate(images_list):
@@ -51,11 +55,14 @@ def load_data():
             # print(img.shape)
 
             images.append(np.asarray(tmp))
-            # np.concatenate((images, np.asarray(tmp)), axis=0)
-        except Exception as e:
-            print("Exception found:", e)
+            images.append(np.fliplr(tmp))
 
-    return np.asarray(images, dtype=np.float32)
+            imgplot = plt.imshow(np.fliplr(tmp))
+            labels = np.concatenate((labels[:index + 1], [labels[index]], labels[index + 1:]))
+        except Exception as e:
+            print("Exception found in", sys._getframe().f_code.co_name, e)
+
+    return np.asarray(images, dtype=np.float32), labels
 
 
 def load_labels():
@@ -97,7 +104,7 @@ def preprocessing(numpy_data):
         flatten = flatten[:, :, np.newaxis] - mean
         flatten = flatten / stddev
     except Exception as e:
-        print("Exception found: ", e)
+        print("Exception found in", sys._getframe().f_code.co_name, e)
 
     return flatten
 
@@ -116,11 +123,22 @@ def fold_generator(data, batch_size):
 def batch_generator(data, labels, batch_size):
     # pass
     # np.random.shuffle(np.array(np.arange(len(data))))
-    indices = np.array(np.arange(len(data)))
-    np.random.shuffle(indices)
 
-    indices = indices[:batch_size]
-    batch_x = data[indices]
-    batch_y = labels[indices]
+    #### THis is a wrong implementation
+    # indices = np.array(np.arange(len(data)))
+    # np.random.shuffle(indices)
+    #
+    # indices = indices[:batch_size]
+    # batch_x = data[indices]
+    # batch_y = labels[indices]
+    ###################################
 
-    return batch_x, batch_y
+    batch_num = int(len(data) / batch_size)
+    batches_x = [data[i * batch_size: (i + 1) * batch_size] for i in range(batch_num)]
+    batches_y = [labels[i * batch_size: (i+1) * batch_size] for i in range(batch_num)]
+
+    if len(data) > batch_num * batch_size:
+        batches_x.append(data[batch_num * batch_size:])
+        batches_y.append(data[batch_num * batch_size:])
+
+    return batches_x, batches_y

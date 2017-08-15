@@ -17,7 +17,7 @@ IMAGE_SIZE = CONSTANT.IMAGE_SHAPE
 NUM_CLASS = CONSTANT.NUM_CLASS
 
 # Training param
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0001
 LEARNING_RATE_DECAY = 0.1
 REG_LAMBDA = 0.5
 
@@ -26,6 +26,9 @@ NUM_EPOCH = 50
 
 TRAIN_SIZE = 3000
 TEST_SIZE = 1000
+
+# Log path
+LOGS_PATH = "./tmp/logs/"
 
 
 # Have no idea what this thing do todo
@@ -45,6 +48,7 @@ def nn_emotion(images):
     # # NN architecture
     # W_conv1 = utils.weight_variable([])
 
+    regularization = tf.Variable(0, dtype=tf.float32)
     with tf.variable_scope('conv1') as scope:
         kernel = utils.weight_variable(shape=[11, 11, 3, 32])
         conv = tf.nn.conv2d(images, kernel, [1, 4, 4, 1], padding='SAME')
@@ -55,6 +59,8 @@ def nn_emotion(images):
 
         # No idea
         _activation_summary(x=conv1)
+
+        regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
 
     # pool1
     pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool1')
@@ -72,6 +78,8 @@ def nn_emotion(images):
         conv2 = tf.nn.relu(tf.nn.bias_add(conv, bias), name=scope.name)
         _activation_summary(conv2)
 
+        regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
+
     # pool2
     pool2 = tf.nn.max_pool(conv2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool3')
 
@@ -88,6 +96,8 @@ def nn_emotion(images):
         conv3 = tf.nn.relu(tf.nn.bias_add(conv, bias), name=scope.name)
         _activation_summary(conv3)
 
+        regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
+
     # conv4
     with tf.variable_scope('conv4') as scope:
         kernel = utils.weight_variable(shape=[5, 5, 128, 96])
@@ -98,10 +108,12 @@ def nn_emotion(images):
         conv4 = tf.nn.relu(tf.nn.bias_add(conv, bias), name=scope.name)
         _activation_summary(conv4)
 
+        regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
+
     # FC1
     conv4_tensor_shape = conv4.get_shape().as_list()
     reshape = tf.reshape(conv4,
-                         [conv4_tensor_shape[0], conv4_tensor_shape[1] * conv4_tensor_shape[2] * conv4_tensor_shape[3]])
+                         [-1, conv4_tensor_shape[1] * conv4_tensor_shape[2] * conv4_tensor_shape[3]])
 
     fc1_weights = utils.weight_variable(
         [conv4_tensor_shape[1] * conv4_tensor_shape[2] * conv4_tensor_shape[3], CONSTANT.FC_NEURON])
@@ -109,22 +121,23 @@ def nn_emotion(images):
 
     fc1 = tf.nn.relu(tf.matmul(reshape, fc1_weights) + fc1_bias)
 
+    # FC2
     fc2_weights = utils.weight_variable([160, 2])
     fc2_bias = utils.bias_variable([2])
 
-    # print("fc1 shape:", fc1.shape)
-    # print("fc2_ weights shape:", fc2_weights.shape)
     fc2 = tf.matmul(fc1, fc2_weights) + fc2_bias
 
-    regularization = tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_bias) + tf.nn.l2_loss(fc2_weights) + tf.nn.l2_loss(
-        fc2_bias)
+    # regularization = tf.multiply(0.001, (
+    # regularization + tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc2_weights)))  # + tf.nn.l2_loss(
+    # fc2_bias) + tf.nn.l2_loss(fc1_bias)  # No more regularization for biases
+    # print(regularization.get_shape().as_list())
 
     return fc2, regularization
 
 
 def main():
-    labels = utils.load_labels()
-    data = utils.load_data()
+    # labels = utils.load_labels()
+    data, labels = utils.load_data()
 
     # data = utils.preprocessing(data)
     # TODO need to implement 4-fold cross-validation later on
@@ -135,22 +148,30 @@ def main():
     y_train_set = labels[:TRAIN_SIZE]
     #######################
 
-    y_nn, regularization = nn_emotion(X_train_set)
+    x = tf.placeholder(tf.float32, [None, 96, 96, 3], name='x')
+    y_ = tf.placeholder(tf.int8, [None, 2], name='y_')
 
-    x = tf.placeholder(tf.float32, [None, 96, 96, 3])
-    y = tf.placeholder(tf.int8, [None, 2])
+    y_nn, regularization = nn_emotion(x)
 
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_train_set, logits=y_nn)) \
-                    + REG_LAMBDA / float(2 * TRAIN_SIZE) * (tf.nn.l2_loss(y_nn)) + regularization
+    # print(regularization.get_shape().as_list())
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_nn)  # + regularization
+    # + REG_LAMBDA / float(2 * TRAIN_SIZE) * (tf.nn.l2_loss(y_nn)) +
 
-    # TODO regularization
+    # TODO regularization: DONE???
 
-    train_step = tf.train.AdamOptimizer(0.001).minimize(cross_entropy)
-    # tf.train.MomentumOptimizer()
+    train_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cross_entropy)
 
-    correct_prediction = tf.equal(tf.argmax(y_nn, 1), tf.argmax(y_train_set, 1))
+    correct_prediction = tf.equal(tf.argmax(y_nn, 1), tf.argmax(y_, 1))
 
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+    # Summary
+    # print(cross_entropy.get_shape().as_list())
+    tf.summary.scalar("cost", cross_entropy)
+    tf.summary.scalar("accuracy", accuracy)
+
+    # Merge all summaries
+    summary_op = tf.summary.merge_all()
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -162,37 +183,32 @@ def main():
         ###     run optimizer by feeding batch
         ###     find cost and reiterate to minimize
 
+        writer = tf.summary.FileWriter(logdir=LOGS_PATH, graph=tf.get_default_graph())
+
+        print(sess.run(y_nn, feed_dict={x: X_train_set, y_: y_train_set}))
         for epoch in range(NUM_EPOCH):
-            # #batch
+            # batch
             total_batch = int(TRAIN_SIZE / BATCH_SIZE)
 
-            for step in range(total_batch):
-                batch_x, batch_y = utils.batch_generator(X_train_set, y_train_set, BATCH_SIZE)
+            batches_x, batches_y = utils.batch_generator(X_train_set, y_train_set, BATCH_SIZE)
 
-                sess.run(train_step, feed_dict={x: batch_x, y: batch_y})
+            for step in range(total_batch):  # TODO batch actually,not step
+                # batch_x, batch_y = utils.batch_generator(X_train_set, y_train_set, BATCH_SIZE)
+                batch_x = batches_x[step]
+                batch_y = batches_y[step]
 
-            training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y: y_train_set})
+                _, summary = sess.run([train_step, summary_op], feed_dict={x: batch_x, y_: batch_y})
+
+                # input("Enter ....")
+                writer.add_summary(summary)
+
+            training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y_: y_train_set})
             print("Epoch:", epoch, "training accuracy = ", training_accuracy)
 
-            # for step in range(2000):
-            #     np.random.shuffle(data)
-            #
-            #     X_train = data[:3000]
-            #     y_train = labels[:3000]
-            #
-            #     X_test = data[3000:]
-            #     y_test = labels[3000:]
-            #
-            #     train_step.run(feed_dict={x: X_train, y: y_train})
-            #     if step % 100 == 0:
-            #         train_accuracy = accuracy.eval(feed_dict={x: X_test, y: y_test})
-            #         print('step %d: training accuracy %g' % (step, train_accuracy))
-            #
-            #     # print('test_accuracy %g' % accuracy.eval(feed_dict={x: X_test, y: y_test}))
-
-        test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y: y_test_set})
+        test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set})
 
         print(test_accuracy)
+
 
 main()
 
