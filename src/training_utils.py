@@ -9,24 +9,24 @@ import CONSTANT
 import matplotlib.pyplot as plt
 
 
-def weight_variable(shape):
-    initial = tf.Variable(tf.truncated_normal(shape, mean=0, stddev=1.0, dtype=tf.float32))
+def weight_variable(shape, name='name'):
+    initial = tf.Variable(tf.truncated_normal(shape, mean=0, stddev=0.01, dtype=tf.float32), name=name)
     return initial
 
 
-def bias_variable(shape):
-    # initial = tf.Variable(tf.truncated_normal(shape, dtype=tf.float32))
-    initial = tf.Variable(np.ones(shape), dtype=tf.float32)
+def bias_variable(shape, name='name'):
+    # initial = tf.Variable(tf.truncated_normal(shape, dtype=tf.float32), name=name)
+    initial = tf.Variable(np.ones(shape), dtype=tf.float32, name=name)
     return initial
 
 
-def conv2d(x, W, strides=(1, 1)):
+def conv2d(x, W, strides=(1, 1), name='name'):
     stride_1, stride_2 = strides
     conv = tf.nn.conv2d(x, W, strides=[1, stride_1, stride_2, 1], padding='SAME')
     return conv
 
 
-def max_pooling(x, filter_sizes, strides=(1, 1)):
+def max_pooling(x, filter_sizes, strides=(1, 1), name='name'):
     stride_1, stride_2 = strides
     size_1, size_2 = filter_sizes
     pooled = tf.nn.max_pool(x, ksize=[1, size_1, size_2, 1], strides=[1, stride_1, stride_2, 1], padding='SAME')
@@ -55,14 +55,21 @@ def load_data():
             # print(img.shape)
 
             images.append(np.asarray(tmp))
-            images.append(np.fliplr(tmp))
+            # images.append(np.fliplr(tmp))
 
-            imgplot = plt.imshow(np.fliplr(tmp))
-            labels = np.concatenate((labels[:index + 1], [labels[index]], labels[index + 1:]))
+            # imgplot = plt.imshow(np.fliplr(tmp))
+            # labels = np.concatenate((labels[:index + 1], [labels[index]], labels[index + 1:]))
         except Exception as e:
             print("Exception found in", sys._getframe().f_code.co_name, e)
 
-    return np.asarray(images, dtype=np.float32), labels
+    images = np.asarray(images, dtype=np.float32)
+    index = np.random.permutation(len(images))
+    print(index)
+    images = images[index]
+    labels = labels[index]
+
+    return images, labels
+    # return np.asarray(images, dtype=np.float32), labels
 
 
 def load_labels():

@@ -17,7 +17,7 @@ IMAGE_SIZE = CONSTANT.IMAGE_SHAPE
 NUM_CLASS = CONSTANT.NUM_CLASS
 
 # Training param
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.01
 LEARNING_RATE_DECAY = 0.1
 REG_LAMBDA = 0.5
 
@@ -57,8 +57,11 @@ def nn_emotion(images):
 
         conv1 = tf.nn.relu(conv + bias, name=scope.name)
 
-        # No idea
-        _activation_summary(x=conv1)
+        # No idea EDITED: Ok i got it =))
+        # _activation_summary(x=conv1)
+        tf.summary.histogram("weights", kernel)
+        tf.summary.histogram("conv", conv)
+        tf.summary.histogram("activation", conv1)
 
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
 
@@ -76,7 +79,11 @@ def nn_emotion(images):
         bias = utils.bias_variable(shape=[96])
 
         conv2 = tf.nn.relu(tf.nn.bias_add(conv, bias), name=scope.name)
-        _activation_summary(conv2)
+
+        # _activation_summary(conv2)
+        tf.summary.histogram("weights", kernel)
+        tf.summary.histogram("conv", conv)
+        tf.summary.histogram("activation", conv2)
 
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
 
@@ -94,9 +101,14 @@ def nn_emotion(images):
         bias = utils.bias_variable([128])
 
         conv3 = tf.nn.relu(tf.nn.bias_add(conv, bias), name=scope.name)
-        _activation_summary(conv3)
+
+        # _activation_summary(conv3)
+        tf.summary.histogram("weights", kernel)
+        tf.summary.histogram("conv", conv)
+        tf.summary.histogram("activation", conv3)
 
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
+        # tf.Print(regularization, [regularization])
 
     # conv4
     with tf.variable_scope('conv4') as scope:
@@ -106,7 +118,11 @@ def nn_emotion(images):
         bias = utils.bias_variable([96])
 
         conv4 = tf.nn.relu(tf.nn.bias_add(conv, bias), name=scope.name)
-        _activation_summary(conv4)
+
+        # _activation_summary(conv4)
+        tf.summary.histogram("weights", kernel)
+        tf.summary.histogram("conv", conv)
+        tf.summary.histogram("activation", conv4)
 
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
 
@@ -127,9 +143,9 @@ def nn_emotion(images):
 
     fc2 = tf.matmul(fc1, fc2_weights) + fc2_bias
 
-    # regularization = tf.multiply(0.001, (
-    # regularization + tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc2_weights)))  # + tf.nn.l2_loss(
-    # fc2_bias) + tf.nn.l2_loss(fc1_bias)  # No more regularization for biases
+    regularization = tf.multiply(0.01, (regularization + tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc2_weights)))
+
+    # + tf.nn.l2_loss(fc2_bias) + tf.nn.l2_loss(fc1_bias)  # No more regularization for biases
     # print(regularization.get_shape().as_list())
 
     return fc2, regularization
@@ -146,6 +162,9 @@ def main():
 
     X_train_set = data[:TRAIN_SIZE]
     y_train_set = labels[:TRAIN_SIZE]
+
+    for sample in y_train_set:
+        print(sample)
     #######################
 
     x = tf.placeholder(tf.float32, [None, 96, 96, 3], name='x')
@@ -154,7 +173,10 @@ def main():
     y_nn, regularization = nn_emotion(x)
 
     # print(regularization.get_shape().as_list())
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_nn)  # + regularization
+    # y_nn_softmax = tf.nn.softmax(y_nn)
+
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_nn) + regularization)
+
     # + REG_LAMBDA / float(2 * TRAIN_SIZE) * (tf.nn.l2_loss(y_nn)) +
 
     # TODO regularization: DONE???
@@ -173,8 +195,15 @@ def main():
     # Merge all summaries
     summary_op = tf.summary.merge_all()
 
+    # FUCKING TIRED OF DEBUGGING
+    f_debug = open("fuckDebug", "w")
+    f_debug1 = open("trueLabels", "w")
+    # FUCKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
+        # print(cross_entropy.eval())
+
         # tf.global_variables_initializer().run()
 
         ### for each epoch, do:
@@ -184,30 +213,39 @@ def main():
         ###     find cost and reiterate to minimize
 
         writer = tf.summary.FileWriter(logdir=LOGS_PATH, graph=tf.get_default_graph())
+        print(accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set}))
 
-        print(sess.run(y_nn, feed_dict={x: X_train_set, y_: y_train_set}))
         for epoch in range(NUM_EPOCH):
             # batch
             total_batch = int(TRAIN_SIZE / BATCH_SIZE)
 
             batches_x, batches_y = utils.batch_generator(X_train_set, y_train_set, BATCH_SIZE)
-
             for step in range(total_batch):  # TODO batch actually,not step
                 # batch_x, batch_y = utils.batch_generator(X_train_set, y_train_set, BATCH_SIZE)
+
                 batch_x = batches_x[step]
                 batch_y = batches_y[step]
+                # print(batch_y)
 
                 _, summary = sess.run([train_step, summary_op], feed_dict={x: batch_x, y_: batch_y})
 
-                # input("Enter ....")
+                if step % 100 == 0:
+                    training_accuracy = accuracy.eval(feed_dict={x: batch_x, y_: batch_y})
+                    loss = cross_entropy.eval(feed_dict={x: batch_x, y_: batch_y})
+
+                    print("Epoch:", epoch, "step:", step, "acc:", training_accuracy, "loss:", loss)
+
                 writer.add_summary(summary)
 
-            training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y_: y_train_set})
-            print("Epoch:", epoch, "training accuracy = ", training_accuracy)
+            # input("FUCK")
+            # print("Epoch:", epoch, " accuracy = ", training_accuracy, " loss = ", loss)
 
         test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set})
 
         print(test_accuracy)
+
+    f_debug.close()
+    f_debug1.close()
 
 
 main()
