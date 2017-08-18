@@ -10,6 +10,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 GENKI4K_db_path = ROOT_DIR + "/data/genki4k/files/"
 GENKI4K_labels_path = ROOT_DIR + "/data/genki4k/labels.txt"
 
+# SOME INPUT DETAILS
 FLATTEN_SHAPE = 192 * 178 * 3
 IMAGE_SHAPE = [192, 178, 3]
 NUM_CLASS = 2
