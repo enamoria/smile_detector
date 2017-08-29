@@ -2,6 +2,8 @@ from __future__ import print_function
 
 import time
 
+import matplotlib.pyplot as plt
+
 import numpy as np
 import tensorflow as tf
 
@@ -23,11 +25,13 @@ LEARNING_RATE = 0.05
 LEARNING_RATE_DECAY = 0.1
 REG_LAMBDA = 0.5
 
-BATCH_SIZE = 128
-NUM_EPOCH = 200
+BATCH_SIZE = 256
+NUM_EPOCH = 50
 
 TRAIN_SIZE = 3000
 TEST_SIZE = 1000
+
+dropout = 0.8
 
 # Log path
 LOGS_PATH = "./tmp/logs/"
@@ -79,7 +83,7 @@ def nn_emotion(images):
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
 
     # pool2
-    pool2 = tf.nn.max_pool(conv2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool3')
+    pool2 = tf.nn.max_pool(conv2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
     # norm2 todo better use batchnorm
     # norm2 = tf.nn.lrn(pool2, bias=1.0, alpha=0.001 / 9.0, beta=0.75, name='norm2')
@@ -98,11 +102,10 @@ def nn_emotion(images):
         tf.summary.histogram("conv", conv)
 
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
-        # tf.Print(regularization, [regularization])
 
     # conv4
     with tf.variable_scope('conv4') as scope:
-        kernel = utils.weight_variable(shape=[5, 5, 128, 96])
+        kernel = utils.weight_variable(shape=[3, 3, 128, 96])
         conv = tf.nn.conv2d(conv3, kernel, strides=[1, 1, 1, 1], padding='SAME')
 
         bias = utils.bias_variable([96])
@@ -147,10 +150,9 @@ def nn_emotion(images):
 
     fc2 = tf.matmul(fc1, fc2_weights) + fc2_bias
 
-    regularization = tf.multiply(0.001, (regularization + tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc2_weights)))
+    fc2 = tf.nn.dropout(fc2, dropout)
 
-    # + tf.nn.l2_loss(fc2_bias) + tf.nn.l2_loss(fc1_bias)  # No more regularization for biases
-    # print(regularization.get_shape().as_list())
+    regularization = tf.multiply(0.001, (regularization + tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc2_weights)))
 
     return fc2, regularization
 
@@ -159,7 +161,12 @@ def main():
     # labels = utils.load_labels()
     data, labels = utils.load_data()
 
+    # plt.imshow(data[1])
+    # plt.show()
     # data = utils.preprocessing(data)
+    # plt.imshow(data[1])
+    # plt.show()
+
     # TODO need to implement 4-fold cross-validation later on
     X_test_set = data[TRAIN_SIZE:]
     y_test_set = labels[TRAIN_SIZE:]
@@ -170,48 +177,33 @@ def main():
 
     x = tf.placeholder(tf.float32, [None, 90, 90, 3], name='x')
     y_ = tf.placeholder(tf.float32, [None, 2], name='y_')
+    keep_prob = tf.placeholder(tf.float32)  # dropout (keep probability)
 
     y_nn, regularization = nn_emotion(x)
 
-    # print(regularization.get_shape().as_list())
-    # y_nn_softmax = tf.nn.softmax(y_nn)
-
-    # cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_nn) + regularization)
     pred = tf.nn.softmax(y_nn)
-
-    # loss = (tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-    #     logits=out_layer, labels=tf_train_labels)) +
-    #         0.01 * tf.nn.l2_loss(hidden_weights) +
-    #         0.01 * tf.nn.l2_loss(hidden_biases) +
-    #         0.01 * tf.nn.l2_loss(out_weights) +
-    #         0.01 * tf.nn.l2_loss(out_biases))
 
     global_step = tf.Variable(0, trainable=False)
 
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_nn)) + regularization
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_nn)) #+ regularization
 
     # TODO regularization: DONE???
 
     learning_rate = tf.train.exponential_decay(LEARNING_RATE, global_step,
-                                               120, 0.96, staircase=True)
+                                               150, 0.96, staircase=True)
     train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
 
     correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y_, 1))
 
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    # Summary
+    ''' Summary '''
     # print(cross_entropy.get_shape().as_list())
     tf.summary.scalar("cost", cross_entropy)
     tf.summary.scalar("accuracy", accuracy)
 
-    # Merge all summaries
+    ''' Merge all summaries '''
     summary_op = tf.summary.merge_all()
-
-    # FUCKING TIRED OF DEBUGGING
-    f_debug = open("fuckDebug", "w")
-    f_debug1 = open("trueLabels", "w")
-    # FUCKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 
     with tf.Session() as sess:
         start_time = time.time()
@@ -231,44 +223,55 @@ def main():
             batches_x, batches_y = utils.batch_generator(X_train_set, y_train_set, BATCH_SIZE)
             for step in range(total_batch):  # TODO batch actually,not step
                 counter = 0
-                while counter < 3:
+                while counter < 6:
                     batch_x = batches_x[step]
                     batch_y = batches_y[step]
 
-                    if counter == 1:
-                        if np.random.random() >= 0.5:
-                            batch_x = utils.augmentation(batch_x, 'fliplr')
-                        else:
-                            break
+                    batch_x = utils.augmentation(batch_x, counter=counter)
+                    # if counter == 1:
+                    #     if np.random.random() >= 0.5:
+                    #         batch_x = utils.augmentation(batch_x, 'fliplr')
+                    #     else:
+                    #         break
+                    #
+                    # if counter == 2:
+                    #     if np.random.random() >= 0.5:
+                    #         batch_x = utils.augmentation(batch_x, 'flipud')
+                    #     else:
+                    #         break
 
-                    if counter == 2:
-                        if np.random.random() >= 0.5:
-                            batch_x = utils.augmentation(batch_x, 'flipud')
-                        else:
-                            break
-
-                    _, summary = sess.run([train_step, summary_op], feed_dict={x: batch_x, y_: batch_y})
+                    _, summary = sess.run([train_step, summary_op],
+                                          feed_dict={x: batch_x, y_: batch_y, keep_prob: dropout})
 
                     writer.add_summary(summary, epoch * total_batch + step)
                     counter += 1
 
-            training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y_: y_train_set})
-            loss = cross_entropy.eval(feed_dict={x: X_train_set, y_: y_train_set})
-            test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set})
+            training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y_: y_train_set, keep_prob: dropout})
+            loss = cross_entropy.eval(feed_dict={x: X_train_set, y_: y_train_set, keep_prob: dropout})
+            test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set, keep_prob: 1})
             lr = learning_rate.eval()
 
             print("Epoch:", epoch, "acc:", training_accuracy, test_accuracy, "loss:", loss, "learning rate:", lr)
 
-        test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set})
+            if test_accuracy > 0.95:
+                for index, predict in enumerate(
+                        np.argmax(pred.eval(feed_dict={x: X_test_set, y_: y_test_set, keep_prob: 1}), axis=1)):
+                    if predict != np.argmax(y_test_set[index]):
+                        if predict == 1:
+                            plt.title("Smile")
+                        else:
+                            plt.title("Non-smile")
+                        plt.imshow(X_test_set[index])
+
+                    if index > 10:
+                        break
+                plt.show()
+
+        test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set, keep_prob: 1})
 
         print(test_accuracy)
 
         print("Training time: ", time.time() - start_time)
 
-    f_debug.close()
-    f_debug1.close()
-
 
 main()
-
-# nn_emotion()
