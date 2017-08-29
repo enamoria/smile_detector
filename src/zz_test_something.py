@@ -1,11 +1,15 @@
 from __future__ import print_function
+import os
+import CONSTANT
 from src.training_utils import weight_variable
 # import urllib2
 # from urllib.request import urlopen
 # from io import BytesIO
 # from PIL import Image
 # from scipy.misc import imread
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import PIL
 import numpy as np
 from src.training_utils import batch_generator as bg
 
@@ -97,13 +101,56 @@ import tensorflow as tf
 # f.write(".".join(str(i) for i in a))
 # f.close()
 
-a = np.array([1,2,3,4,5])
-b = np.array([6,7,8,9,10])
+# a = np.array([1,2,3,4,5])
+# b = np.array([6,7,8,9,10])
+#
+# index = np.random.permutation(len(a))
+# print(a)
+# print(b)
+#
+# print(index)
+# print(a[index])
+# print(b[index])
 
-index = np.random.permutation(len(a))
-print(a)
-print(b)
+# image = mpimg.imread("file0001.jpg")
+# plt.imshow(image)
 
-print(index)
-print(a[index])
-print(b[index])
+# a = np.array([[1, 2, 3], [3, 4, 5]])
+# print(a)
+# mean = np.mean(a, axis=1)
+# stddev = np.std(a, axis=1)
+#
+# for index, image in enumerate(a):
+#     image = image - mean[index]
+#     image = image / stddev[index]
+#     print(image)
+
+db_path = CONSTANT.ALIGNED_CROPPED_db_path
+images_list = os.listdir(db_path)
+
+images_list = [int(image_name[4:8]) for image_name in images_list]
+# print(images_list)
+# print(len(images_list))
+prev = 0
+noise = []
+for index, value in enumerate(images_list):
+    if value - prev != 1:
+        for i in range(prev+1, value):
+            print(i)
+            noise.append(i-1)
+    prev = value
+
+labels_path = CONSTANT.GENKI4K_labels_path
+f_labels = open(labels_path, "r")
+f_labels_modified = open(labels_path + "_modified", "w")
+
+i = 0
+while True:
+    sample = f_labels.readline().strip("\n")
+    if sample == "":
+        break
+
+    if i not in noise:
+        f_labels_modified.write(sample + "\n")
+
+    i += 1
