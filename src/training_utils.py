@@ -6,8 +6,6 @@ import numpy as np
 import tensorflow as tf
 
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-
 import CONSTANT
 
 
@@ -37,13 +35,11 @@ def max_pooling(x, filter_sizes, strides=(1, 1), name='name'):
 
 def local_norm(output):
     return
-    # tf.nn.local_response_normalization()
     # BETTER USE BATCH_NORM
     # TODO Done
 
 
 def load_data():
-    # shape_0, shape_1, shape_2 = CONSTANT.IMAGE_SHAPE
     # db_path = CONSTANT.GENKI4K_db_path
     db_path = CONSTANT.ALIGNED_CROPPED_db_path
     images_list = os.listdir(db_path)
@@ -53,27 +49,25 @@ def load_data():
     images = []
     for index, image_name in enumerate(images_list):
         img = cv2.imread(db_path + image_name)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
         try:
             tmp = cv2.resize(img, (90, 90))
-            # print(img.shape)
 
-            images.append(np.asarray(tmp))
-            # images.append(np.fliplr(tmp))
-
-            # plt.imshow(np.fliplr(tmp))
+            images.append(tmp)
+            # plt.title("...")
+            # plt.imshow(tmp)
             # plt.show()
-            # labels = np.concatenate((labels[:index + 1], [labels[index]], labels[index + 1:]))
         except Exception as e:
             print("Exception found in", sys._getframe().f_code.co_name, e)
 
-    images = np.asarray(images, dtype=np.float32)
+    images = np.asarray(images)  # , dtype=np.float32)
     index = np.random.permutation(len(images))
     print(index)
     images = images[index]
     labels = labels[index]
 
     return images, labels
-    # return np.asarray(images, dtype=np.float32), labels
 
 
 def load_labels():
@@ -94,38 +88,60 @@ def load_labels():
     return np.asarray(labels)
 
 
-def augmentation(data, augmentation_method='fliplr'):
-    # print(type(data))
-    if augmentation_method == 'fliplr':
-        return [np.fliplr(i) for i in data]
-    if augmentation_method == 'flipud':
-        return [np.flipud(i) for i in data]
+def augmentation(data, counter):
+    # augmentation_method = 'fliplr',
+    # if augmentation_method == 'fliplr':
+    #     return [np.fliplr(i) for i in data]
+    # if augmentation_method == 'flipud':
+    #     return [np.flipud(i) for i in data]
+    # if augmentation_method == 'rotate90':
+    #     return [np.rot90(i, 1) for i in data]
+    # if augmentation_method == 'rotate180':
+    #     return [np.rot90(i, 2) for i in data]
+    # if augmentation_method == 'rotate270':
+    #     return [np.rot90(i, 3) for i in data]
+    if np.random.random() >= 0.5:
+        if counter == 0:
+            return data
+        if counter == 1:
+            return [np.fliplr(i) for i in data]
+        if counter == 2:
+            return [np.flipud(i) for i in data]
+        if counter == 3:
+            return [np.rot90(i, 1) for i in data]
+        if counter == 4:
+            return [np.rot90(i, 2) for i in data]
+        if counter == 5:
+            return [np.rot90(i, 3) for i in data]
+
+    return data
 
 
 def preprocessing(numpy_data):
-    # return [tf.image.per_image_standardization(image) for image in numpy_data]
+    shape = numpy_data.shape
+    numpy_data = numpy_data.astype(float)
     flatten = np.reshape(numpy_data, (numpy_data.shape[0], -1))
-    # print(flatten.shape, numpy_data.shape)
+    # print(flatten.shape)
 
     mean = np.mean(flatten, axis=1)
     stddev = np.std(flatten, axis=1)
 
-    # print(type(numpy_data))
-    # print(type(flatten))
-    # print(type(mean))
-    # print(type(stddev))
+    # try:
+    # print(mean, stddev)
+    # print(flatten[1])
+    for i in range(flatten.shape[0]):
+        # print(flatten[i])
+        # print(mean[i])
+        # print(stddev[i])
+        flatten[i] = (flatten[i] - mean[i]) / (stddev[i])
+        # flatten[i] = flatten[i] / stddev[i]
+        # print(flatten[i])
+    # print(flatten[1])
 
-    print(flatten.shape)
-    print(mean.shape)
-    print(stddev.shape)
+    # except Exception as e:
+    # print("Exception found in", sys._getframe().f_code.co_name, e)
 
-    try:
-        flatten = flatten[:, :, np.newaxis] - mean
-        flatten = flatten / stddev
-    except Exception as e:
-        print("Exception found in", sys._getframe().f_code.co_name, e)
-
-    return flatten
+    return np.reshape(flatten, (shape[0], shape[1], shape[2], shape[3]))
 
 
 def fold_generator(data, batch_size):
@@ -140,16 +156,13 @@ def fold_generator(data, batch_size):
 
 
 def batch_generator(data, labels, batch_size):
-    # pass
-    # np.random.shuffle(np.array(np.arange(len(data))))
-
     batch_num = int(len(data) / batch_size)
 
     np.random.permutation(data)
 
     indices = np.array(np.arange(len(data)))
     np.random.shuffle(indices)
-    # indices = indices[:batch_size]
+
     data = data[indices]
     labels = labels[indices]
 
