@@ -2,10 +2,10 @@ import os
 import sys
 
 import cv2
+import matplotlib.colors as mc
 import numpy as np
 import tensorflow as tf
 
-import matplotlib.pyplot as plt
 import CONSTANT
 
 
@@ -15,7 +15,6 @@ def weight_variable(shape, name='name'):
 
 
 def bias_variable(shape, name='name'):
-    # initial = tf.Variable(tf.truncated_normal(shape, dtype=tf.float32), name=name)
     initial = tf.Variable(np.ones(shape), dtype=tf.float32, name=name)
     return initial
 
@@ -40,7 +39,6 @@ def local_norm(output):
 
 
 def load_data():
-    # db_path = CONSTANT.GENKI4K_db_path
     db_path = CONSTANT.ALIGNED_CROPPED_db_path
     images_list = os.listdir(db_path)
 
@@ -55,15 +53,11 @@ def load_data():
             tmp = cv2.resize(img, (90, 90))
 
             images.append(tmp)
-            # plt.title("...")
-            # plt.imshow(tmp)
-            # plt.show()
         except Exception as e:
             print("Exception found in", sys._getframe().f_code.co_name, e)
 
     images = np.asarray(images)  # , dtype=np.float32)
     index = np.random.permutation(len(images))
-    print(index)
     images = images[index]
     labels = labels[index]
 
@@ -100,19 +94,54 @@ def augmentation(data, counter):
     #     return [np.rot90(i, 2) for i in data]
     # if augmentation_method == 'rotate270':
     #     return [np.rot90(i, 3) for i in data]
-    if np.random.random() >= 0.5:
-        if counter == 0:
-            return data
-        if counter == 1:
-            return [np.fliplr(i) for i in data]
-        if counter == 2:
-            return [np.flipud(i) for i in data]
-        if counter == 3:
-            return [np.rot90(i, 1) for i in data]
-        if counter == 4:
-            return [np.rot90(i, 2) for i in data]
-        if counter == 5:
-            return [np.rot90(i, 3) for i in data]
+    # if np.random.random() >= 0:
+    def rgb2grayscale(image):
+        # r, g, b = image[:, :, 0], image[:, :, 1], image[:, :, 2]
+
+        image[:, :, 0] = image[:, :, 0] * 0.3
+        image[:, :, 1] = image[:, :, 1] * 0.59
+        image[:, :, 2] = image[:, :, 2] * 0.11
+
+        return image
+
+    def rgb2yuv(image):
+        R, G, B = image[:, :, 0], image[:, :, 1], image[:, :, 2]
+
+        Y = ((66 * R + 129 * G + 25 * B + 128) >> 8) + 16
+        U = ((-38 * R - 74 * G + 112 * B + 128) >> 8) + 128
+        V = ((112 * R - 94 * G - 18 * B + 128) >> 8) + 128
+
+        return np.concatenate((Y, U, V), 1)
+
+    def rgb2yiq(image):
+        # start_time = time.time()
+        conversion_matrix = np.array([[0.299, 0.587, 0.114],
+                                      [0.596, -0.274, -0.322],
+                                      [0.211, -0.523, 0.312]])
+
+        ''' Better use broadcasting '''
+        result = np.empty(image.shape)
+        for i in range(result.shape[0]):
+            for j in range(result.shape[1]):
+                result[i, j] = np.dot(conversion_matrix, image[i, j]) / 255
+
+        # plt.imshow(result)
+        # plt.show()
+        # print("Convert time:", time.time() - start_time)
+        return result
+
+    if counter == 0:
+        return data
+    if counter == 1:
+        return [np.fliplr(i) for i in data]
+    if counter == 2:
+        return [mc.rgb_to_hsv(i) for i in data]
+    if counter == 3:
+        return [rgb2grayscale(i) for i in data]
+    # if counter == 4:
+    #     return [tf.image.random_contrast(i, 0.2, 1.8) for i in data]
+    # if counter == 5:
+    #     return [np.rot90(i, 3) for i in data]
 
     return data
 
@@ -121,31 +150,18 @@ def preprocessing(numpy_data):
     shape = numpy_data.shape
     numpy_data = numpy_data.astype(float)
     flatten = np.reshape(numpy_data, (numpy_data.shape[0], -1))
-    # print(flatten.shape)
 
     mean = np.mean(flatten, axis=1)
     stddev = np.std(flatten, axis=1)
 
-    # try:
-    # print(mean, stddev)
-    # print(flatten[1])
     for i in range(flatten.shape[0]):
-        # print(flatten[i])
-        # print(mean[i])
-        # print(stddev[i])
         flatten[i] = (flatten[i] - mean[i]) / (stddev[i])
-        # flatten[i] = flatten[i] / stddev[i]
-        # print(flatten[i])
-    # print(flatten[1])
-
-    # except Exception as e:
-    # print("Exception found in", sys._getframe().f_code.co_name, e)
 
     return np.reshape(flatten, (shape[0], shape[1], shape[2], shape[3]))
 
 
 def fold_generator(data, batch_size):
-    # TODO need to be edited
+    # TODO need to be edited. It's fold, not batch. Implementation is right (up to this point)
     batch_num = int(len(data) / batch_size)
     batches = [data[i * batch_size: (i + 1) * batch_size] for i in range(batch_num)]
 
