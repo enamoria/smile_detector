@@ -21,7 +21,7 @@ LEARNING_RATE_DECAY = 0.1
 REG_LAMBDA = 0.5
 
 BATCH_SIZE = 256
-NUM_EPOCH = 30
+NUM_EPOCH = 1000
 
 TRAIN_SIZE = 3000
 TEST_SIZE = 1000
@@ -40,7 +40,7 @@ def _activation_summary(x):
     tf.summary.histogram(tensor_name, x)
 
 
-def nn_emotion(images):
+def nn_emotion(images, is_training):
     regularization = tf.Variable(0, dtype=tf.float32)
 
     ''' conv1 '''
@@ -57,6 +57,9 @@ def nn_emotion(images):
 
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
 
+    conv1 = tf.contrib.layers.batch_norm(conv1, is_training=is_training,
+                                            updates_collections=None, scale=True)
+    # ReLu activation
     ''' pool1 '''
     pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool1')
 
@@ -78,6 +81,8 @@ def nn_emotion(images):
 
         regularization = tf.add(regularization, tf.nn.l2_loss(kernel))
 
+    conv2 = tf.contrib.layers.batch_norm(conv2, is_training=is_training,
+                                         updates_collections=None, scale=True)
     ''' pool2 '''
     pool2 = tf.nn.max_pool(conv2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
@@ -162,10 +167,11 @@ def main():
     ''' What we will feed into the computational graph '''
     x = tf.placeholder(tf.float32, [None, 90, 90, 3], name='x')
     y_ = tf.placeholder(tf.float32, [None, 2], name='y_')
+    is_training = tf.placeholder(tf.bool)
     keep_prob = tf.placeholder(tf.float32)  # dropout (keep probability)
 
     ''' Construct the graph '''
-    y_nn, regularization = nn_emotion(x)
+    y_nn, regularization = nn_emotion(x, is_training)
 
     pred = tf.nn.softmax(y_nn)
 
@@ -178,7 +184,7 @@ def main():
 
     ''' Learning rate decay over time '''
     learning_rate = tf.train.exponential_decay(LEARNING_RATE, global_step,
-                                               200, 0.96, staircase=True)
+                                               1000, 0.96, staircase=True)
     # TODO try using momentum
     train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy, global_step=global_step)
 
@@ -232,7 +238,7 @@ def main():
                     counter = 0
 
                     ''' Augmentation. 4 augmentation approaches was included. See training_utils.augmentation '''
-                    while counter < 6:  # Tiny bug. Doesn't affect accuracy but reduce time efficiency. It should be 4
+                    while counter < 4:  # Tiny bug. Doesn't affect accuracy but reduce time efficiency. It should be 4
                         ''' Training batch '''
                         batch_x = batches_x[step]
                         batch_y = batches_y[step]
@@ -251,16 +257,16 @@ def main():
                         #         break
 
                         _, summary = sess.run([train_step, summary_op],
-                                              feed_dict={x: batch_x, y_: batch_y, keep_prob: dropout})
+                                              feed_dict={x: batch_x, y_: batch_y, keep_prob: dropout, is_training: True})
 
                         writer.add_summary(summary, epoch * total_batch + step)
                         counter += 1
 
                 ''' Print training and testing result on-the-fly '''
                 if epoch % 5 == 0:
-                    training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y_: y_train_set, keep_prob: dropout})
-                    loss = cross_entropy.eval(feed_dict={x: X_train_set, y_: y_train_set, keep_prob: dropout})
-                    test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set, keep_prob: 1})
+                    training_accuracy = accuracy.eval(feed_dict={x: X_train_set, y_: y_train_set, keep_prob: dropout, is_training:True})
+                    loss = cross_entropy.eval(feed_dict={x: X_train_set, y_: y_train_set, keep_prob: dropout, is_training:True})
+                    test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set, keep_prob: 1, is_training:False})
                     lr = learning_rate.eval()
 
                     print("Epoch:", epoch, "acc:", training_accuracy, test_accuracy, "loss:", loss, "learning rate:",
@@ -280,7 +286,7 @@ def main():
                     #             break
                     #     plt.show()
             ''' Test accuracy for each cross validation step'''
-            test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set, keep_prob: 1})
+            test_accuracy = accuracy.eval(feed_dict={x: X_test_set, y_: y_test_set, keep_prob: 1, is_training: False})
 
             print("Fold:", fold_index, test_accuracy)
             accuracies.append(test_accuracy)
